@@ -1,0 +1,565 @@
+[
+  {
+    "name": "perfect_mixed",
+    "form": {
+      "hasScoring": true,
+      "total_score": 100,
+      "fields": [
+        {
+          "id": "a",
+          "type": "rating",
+          "maxStars": 5,
+          "star_scores": {
+            "1": 2,
+            "2": 4,
+            "3": 6,
+            "4": 8,
+            "5": 10
+          },
+          "max_score": 40
+        },
+        {
+          "id": "b",
+          "type": "yesno",
+          "yes_score": 10,
+          "no_score": 0,
+          "max_score": 30
+        },
+        {
+          "id": "c",
+          "type": "radio",
+          "options": [
+            {
+              "label": "x",
+              "value": "x",
+              "score": 5
+            },
+            {
+              "label": "y",
+              "value": "y",
+              "score": 10
+            }
+          ],
+          "max_score": 30
+        }
+      ]
+    },
+    "responses": {
+      "a": 5,
+      "b": "Yes",
+      "c": "y"
+    },
+    "expected": 100
+  },
+  {
+    "name": "partial_mixed",
+    "form": {
+      "hasScoring": true,
+      "total_score": 100,
+      "fields": [
+        {
+          "id": "a",
+          "type": "rating",
+          "maxStars": 5,
+          "star_scores": {
+            "1": 2,
+            "2": 4,
+            "3": 6,
+            "4": 8,
+            "5": 10
+          },
+          "max_score": 40
+        },
+        {
+          "id": "b",
+          "type": "yesno",
+          "yes_score": 10,
+          "no_score": 0,
+          "max_score": 30
+        },
+        {
+          "id": "c",
+          "type": "radio",
+          "options": [
+            {
+              "label": "x",
+              "value": "x",
+              "score": 5
+            },
+            {
+              "label": "y",
+              "value": "y",
+              "score": 10
+            }
+          ],
+          "max_score": 30
+        }
+      ]
+    },
+    "responses": {
+      "a": 3,
+      "b": "No",
+      "c": "x"
+    },
+    "expected": 39
+  },
+  {
+    "name": "nps_checkbox_slider",
+    "form": {
+      "hasScoring": true,
+      "total_score": 50,
+      "fields": [
+        {
+          "id": "n",
+          "type": "nps",
+          "nps_min": 0,
+          "nps_max": 10,
+          "nps_scores": {
+            "0": 0,
+            "5": 50,
+            "10": 100
+          },
+          "max_score": 20
+        },
+        {
+          "id": "k",
+          "type": "checkbox",
+          "options": [
+            {
+              "label": "a",
+              "value": "a",
+              "score": 4
+            },
+            {
+              "label": "b",
+              "value": "b",
+              "score": 6
+            }
+          ],
+          "max_score": 15
+        },
+        {
+          "id": "s",
+          "type": "slider",
+          "min": 0,
+          "max": 10,
+          "step": 1,
+          "max_score": 15
+        }
+      ]
+    },
+    "responses": {
+      "n": 5,
+      "k": [
+        "a"
+      ],
+      "s": 5
+    },
+    "expected": 23.5
+  },
+  {
+    "name": "legacy_unweighted",
+    "form": {
+      "hasScoring": true,
+      "total_score": 100,
+      "fields": [
+        {
+          "id": "a",
+          "type": "rating",
+          "maxStars": 5,
+          "star_scores": {
+            "1": 2,
+            "2": 4,
+            "3": 6,
+            "4": 8,
+            "5": 10
+          }
+        },
+        {
+          "id": "b",
+          "type": "yesno",
+          "yes_score": 10,
+          "no_score": 0
+        }
+      ]
+    },
+    "responses": {
+      "a": 4,
+      "b": "Yes"
+    },
+    "expected": 90
+  },
+  {
+    "name": "critical_failed_zeroes_the_form",
+    "form": {
+      "hasScoring": true,
+      "total_score": 100,
+      "fields": [
+        {
+          "id": "id_check",
+          "type": "yesno",
+          "yes_score": 10,
+          "no_score": 0,
+          "max_score": 20,
+          "critical": true,
+          "label": "Verified identity"
+        },
+        {
+          "id": "empathy",
+          "type": "rating",
+          "maxStars": 5,
+          "star_scores": {
+            "1": 2,
+            "2": 4,
+            "3": 6,
+            "4": 8,
+            "5": 10
+          },
+          "max_score": 40
+        },
+        {
+          "id": "close",
+          "type": "yesno",
+          "yes_score": 10,
+          "no_score": 0,
+          "max_score": 40
+        }
+      ]
+    },
+    "responses": {
+      "id_check": "No",
+      "empathy": 5,
+      "close": "Yes"
+    },
+    "expected": 0,
+    "expected_breakdown": {
+      "score": 0,
+      "rawScore": 80,
+      "criticalFailed": [
+        "id_check"
+      ],
+      "sections": []
+    }
+  },
+  {
+    "name": "critical_passed_scores_normally",
+    "form": {
+      "hasScoring": true,
+      "total_score": 100,
+      "fields": [
+        {
+          "id": "id_check",
+          "type": "yesno",
+          "yes_score": 10,
+          "no_score": 0,
+          "max_score": 20,
+          "critical": true
+        },
+        {
+          "id": "empathy",
+          "type": "rating",
+          "maxStars": 5,
+          "star_scores": {
+            "1": 2,
+            "2": 4,
+            "3": 6,
+            "4": 8,
+            "5": 10
+          },
+          "max_score": 40
+        },
+        {
+          "id": "close",
+          "type": "yesno",
+          "yes_score": 10,
+          "no_score": 0,
+          "max_score": 40
+        }
+      ]
+    },
+    "responses": {
+      "id_check": "Yes",
+      "empathy": 5,
+      "close": "No"
+    },
+    "expected": 60,
+    "expected_breakdown": {
+      "score": 60,
+      "rawScore": 60,
+      "criticalFailed": [],
+      "sections": []
+    }
+  },
+  {
+    "name": "critical_on_a_zero_point_option_only",
+    "form": {
+      "hasScoring": true,
+      "total_score": 100,
+      "fields": [
+        {
+          "id": "tone",
+          "type": "radio",
+          "critical": true,
+          "options": [
+            {
+              "label": "Rude",
+              "value": "rude",
+              "score": 0
+            },
+            {
+              "label": "Fine",
+              "value": "fine",
+              "score": 5
+            },
+            {
+              "label": "Great",
+              "value": "great",
+              "score": 10
+            }
+          ],
+          "max_score": 50
+        },
+        {
+          "id": "b",
+          "type": "yesno",
+          "yes_score": 10,
+          "no_score": 0,
+          "max_score": 50
+        }
+      ]
+    },
+    "responses": {
+      "tone": "fine",
+      "b": "Yes"
+    },
+    "expected": 75,
+    "expected_breakdown": {
+      "score": 75,
+      "rawScore": 75,
+      "criticalFailed": [],
+      "sections": []
+    }
+  },
+  {
+    "name": "two_sections_and_a_general_group",
+    "form": {
+      "hasScoring": true,
+      "total_score": 100,
+      "fields": [
+        {
+          "id": "pre",
+          "type": "yesno",
+          "yes_score": 10,
+          "no_score": 0,
+          "max_score": 10
+        },
+        {
+          "id": "s1",
+          "type": "section",
+          "label": "Opening"
+        },
+        {
+          "id": "greet",
+          "type": "rating",
+          "maxStars": 5,
+          "star_scores": {
+            "1": 2,
+            "2": 4,
+            "3": 6,
+            "4": 8,
+            "5": 10
+          },
+          "max_score": 20
+        },
+        {
+          "id": "name",
+          "type": "yesno",
+          "yes_score": 10,
+          "no_score": 0,
+          "max_score": 20
+        },
+        {
+          "id": "s2",
+          "type": "section",
+          "label": "Resolution"
+        },
+        {
+          "id": "fix",
+          "type": "yesno",
+          "yes_score": 10,
+          "no_score": 0,
+          "max_score": 30
+        },
+        {
+          "id": "confirm",
+          "type": "rating",
+          "maxStars": 5,
+          "star_scores": {
+            "1": 2,
+            "2": 4,
+            "3": 6,
+            "4": 8,
+            "5": 10
+          },
+          "max_score": 20
+        }
+      ]
+    },
+    "responses": {
+      "pre": "Yes",
+      "greet": 5,
+      "name": "No",
+      "fix": "Yes",
+      "confirm": 2
+    },
+    "expected": 68,
+    "expected_breakdown": {
+      "score": 68,
+      "rawScore": 68,
+      "criticalFailed": [],
+      "sections": [
+        {
+          "id": "_general",
+          "percent": 100,
+          "earned": 10,
+          "max": 10
+        },
+        {
+          "id": "s1",
+          "percent": 50,
+          "earned": 20,
+          "max": 40
+        },
+        {
+          "id": "s2",
+          "percent": 76,
+          "earned": 38,
+          "max": 50
+        }
+      ]
+    }
+  },
+  {
+    "name": "sections_with_a_critical_fail_keep_their_breakdown",
+    "form": {
+      "hasScoring": true,
+      "total_score": 60,
+      "fields": [
+        {
+          "id": "s1",
+          "type": "section",
+          "label": "Compliance"
+        },
+        {
+          "id": "disclose",
+          "type": "yesno",
+          "yes_score": 10,
+          "no_score": 0,
+          "max_score": 30,
+          "critical": true
+        },
+        {
+          "id": "s2",
+          "type": "section",
+          "label": "Service"
+        },
+        {
+          "id": "help",
+          "type": "rating",
+          "maxStars": 5,
+          "star_scores": {
+            "1": 2,
+            "2": 4,
+            "3": 6,
+            "4": 8,
+            "5": 10
+          },
+          "max_score": 30
+        }
+      ]
+    },
+    "responses": {
+      "disclose": "No",
+      "help": 4
+    },
+    "expected": 0,
+    "expected_breakdown": {
+      "score": 0,
+      "rawScore": 24,
+      "criticalFailed": [
+        "disclose"
+      ],
+      "sections": [
+        {
+          "id": "s1",
+          "percent": 0,
+          "earned": 0,
+          "max": 30
+        },
+        {
+          "id": "s2",
+          "percent": 80,
+          "earned": 24,
+          "max": 30
+        }
+      ]
+    }
+  },
+  {
+    "name": "a_heading_with_nothing_scored_under_it_is_omitted",
+    "form": {
+      "hasScoring": true,
+      "total_score": 100,
+      "fields": [
+        {
+          "id": "s0",
+          "type": "section",
+          "label": "Notes"
+        },
+        {
+          "id": "n",
+          "type": "textarea",
+          "label": "Notes"
+        },
+        {
+          "id": "s1",
+          "type": "section",
+          "label": "Scored"
+        },
+        {
+          "id": "a",
+          "type": "yesno",
+          "yes_score": 10,
+          "no_score": 0,
+          "max_score": 50
+        },
+        {
+          "id": "b",
+          "type": "yesno",
+          "yes_score": 10,
+          "no_score": 0,
+          "max_score": 50
+        }
+      ]
+    },
+    "responses": {
+      "n": "anything",
+      "a": "Yes",
+      "b": "No"
+    },
+    "expected": 50,
+    "expected_breakdown": {
+      "score": 50,
+      "rawScore": 50,
+      "criticalFailed": [],
+      "sections": [
+        {
+          "id": "s1",
+          "percent": 50,
+          "earned": 50,
+          "max": 100
+        }
+      ]
+    }
+  }
+]

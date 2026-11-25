@@ -1,0 +1,37 @@
+# --- secrets and local configuration (never commit) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- dependencies and build output ---
+node_modules/
+venv/
+.venv/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- runtime state ---
+celerybeat-schedule*
+*.log
+backend/public/uploads/*
+!backend/public/uploads/.gitkeep
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# --- tooling ---
+.claude/
