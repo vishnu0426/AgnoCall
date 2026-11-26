@@ -39,5 +39,5 @@ export function middleware(req: NextRequest) {
 
 export const config = {
   // Everything except Next internals, static files and public form links.
-  matcher: ["/((?!_next/|api/|favicon|fill/|.*\\.[a-zA-Z0-9]+$).*)"],
+  matcher: ["/((?!_next/|api/|favicon|forms/f/|.*\\.[a-zA-Z0-9]+$).*)"],
 };
