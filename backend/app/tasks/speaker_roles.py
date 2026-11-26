@@ -16,8 +16,12 @@ role_source values stored on the call (call_metadata["speaker_roles"]["source"])
 """
 import array
 import io
+import logging
+import shutil
 import subprocess
 import wave
+
+log = logging.getLogger(__name__)
 
 # Below this average level a channel is treated as silent (16-bit samples, max 32768).
 SILENT_RMS = 20.0
@@ -104,11 +108,16 @@ def transcribe_with_roles(provider, source_audio: bytes, mono_wav: bytes, filena
 
     if not getattr(provider, "supports_channel_split", False):
         info["reason"] = "provider_does_not_split_channels"
+    elif not (shutil.which("ffmpeg") and shutil.which("ffprobe")):
+        # Without this check a missing tool would look like "mono recording" and quietly guess the roles.
+        info["reason"] = "ffprobe_missing"
+        log.warning("ffmpeg/ffprobe not found on PATH: stereo calls cannot be split, speaker roles are guessed")
     else:
         channels = probe_channels(source_audio)
         info["channels"] = channels
         if channels != 2:
-            info["reason"] = "mono_recording" if channels == 1 else "unsupported_channel_count"
+            info["reason"] = ("mono_recording" if channels == 1
+                              else "could_not_read_channels" if channels == 0 else "unsupported_channel_count")
         else:
             sides = [extract_channel(source_audio, i) for i in (0, 1)]
             verdict = judge_channels(*sides)

@@ -91,8 +91,13 @@ The worker needs `ffmpeg` on its `PATH` — it's used to normalize whatever
 codec/container the source audio arrives in (see "Audio normalization"
 below) before handing it to an STT provider:
 
+It also needs `ffprobe` (installed together with `ffmpeg`) to split stereo recordings into the
+agent and customer channels. Check with `ffmpeg -version && ffprobe -version`.
+
 ```bash
-brew install ffmpeg
+brew install ffmpeg            # macOS
+winget install Gyan.FFmpeg     # Windows (open a new terminal afterwards)
+sudo apt-get install ffmpeg    # Debian / Ubuntu
 ```
 
 ```bash

@@ -1,3 +1,11 @@
+# System tools (NOT installable with pip) - the worker needs both on PATH:
+#   ffmpeg + ffprobe  - audio decoding, mono playback copy, and splitting stereo calls into
+#                       agent / customer channels. One package provides both:
+#                         Windows:  winget install Gyan.FFmpeg
+#                         macOS:    brew install ffmpeg
+#                         Debian:   apt-get install ffmpeg      (the Dockerfile already does this)
+#   Check:  ffmpeg -version && ffprobe -version
+
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 sqlalchemy==2.0.35

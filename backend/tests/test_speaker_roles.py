@@ -136,3 +136,9 @@ def test_merge_orders_by_time_and_drops_empty_text():
     customer = [{"start_time": 2, "end_time": 3, "text": "customer"}]
     merged = sr.merge_channels(agent, customer)
     assert [(s["speaker_role"], s["sequence"]) for s in merged] == [("customer", 0), ("agent", 1)]
+
+
+def test_missing_ffprobe_is_reported_not_silently_guessed(monkeypatch):
+    monkeypatch.setattr(sr.shutil, "which", lambda name: None)
+    _, info = sr.transcribe_with_roles(FakeProvider(), b"x", b"y", "c.wav", "left")
+    assert info["source"] == "assumed" and info["reason"] == "ffprobe_missing"
