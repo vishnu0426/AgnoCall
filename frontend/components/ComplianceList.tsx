@@ -56,7 +56,7 @@ export default function ComplianceList({ violations, onJump }: { violations: Com
         return (
           <div key={v.id} className="border border-hairline rounded-md px-3.5 py-3">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[12px] font-mono text-muted">{v.rule_code}</span>
+              <span className="text-[13px] font-medium text-ink">{v.rule_label ?? v.rule_code}</span>
               <Badge tone={SEVERITY_TONE[v.severity] || "muted"}>{v.severity}</Badge>
             </div>
             {v.explanation && <p className="text-[12.5px] text-ink leading-relaxed mb-1.5">{v.explanation}</p>}

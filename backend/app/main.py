@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import DataError
 
+from app.core.auth import require_auth, require_internal_key, secret_problem
 from app.core.config import get_settings
 from app.core.database import Base, engine
 from app.storage.minio_client import ensure_bucket
@@ -16,11 +17,24 @@ from app.api import calls, dashboard, internal, agents, compliance, analytics, f
 from app.core.indexes import ensure_indexes
 from app.core.response_cache import ResponseCacheMiddleware
 
+_docs = get_settings().api_docs_enabled
 app = FastAPI(
     title="Enterprise AI Call Recording Analysis Platform",
     version="1.0.0",
     description="Analyzes recorded customer support calls into AI-generated investigation reports.",
+    # The interactive docs list every endpoint: only on when API_DOCS_ENABLED=true.
+    docs_url="/docs" if _docs else None,
+    redoc_url="/redoc" if _docs else None,
+    openapi_url="/openapi.json" if _docs else None,
 )
+
+_problem = secret_problem()
+if _problem:
+    if not get_settings().allow_insecure_defaults:
+        raise RuntimeError(f"{_problem} Set a long random FORMS_JWT_SECRET in .env "
+                           "(for example: python -c \"import secrets; print(secrets.token_urlsafe(48))\").")
+    import logging as _logging
+    _logging.getLogger("agnocall.auth").critical("INSECURE: %s (allowed by ALLOW_INSECURE_DEFAULTS)", _problem)
 
 @app.exception_handler(DataError)
 async def invalid_value_handler(request: Request, exc: DataError):
@@ -40,22 +54,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(calls.router, prefix="/api/v1")
-app.include_router(dashboard.router, prefix="/api/v1")
-app.include_router(internal.router, prefix="/api/v1")
-app.include_router(agents.router, prefix="/api/v1")
-app.include_router(compliance.router, prefix="/api/v1")
-app.include_router(analytics.router, prefix="/api/v1")
-app.include_router(triage.router, prefix="/api/v1")
-app.include_router(ingestion.router, prefix="/api/v1")
-app.include_router(calibration.router, prefix="/api/v1")
-app.include_router(review.router, prefix="/api/v1")
-app.include_router(settings_api.router, prefix="/api/v1")
-app.include_router(settings_api.account_router, prefix="/api/v1")
-app.include_router(reports_api.router, prefix="/api/v1")
+# Every data route needs a signed-in user. tests/test_api_auth.py fails if a route is added without a check.
+_auth = [Depends(require_auth)]
+for _r in (calls.router, dashboard.router, agents.router, compliance.router, analytics.router, triage.router,
+           ingestion.router, calibration.router, review.router, settings_api.router, settings_api.account_router):
+    app.include_router(_r, prefix="/api/v1", dependencies=_auth)
+app.include_router(internal.router, prefix="/api/v1", dependencies=[Depends(require_internal_key)])
+app.include_router(reports_api.router, prefix="/api/v1", dependencies=_auth)
 
-# Forms module (ported from the standalone Form Builder project).
-app.include_router(forms.router, prefix="/api/v1")
+# Forms module (ported from the standalone Form Builder project). Per-route checks live in the module;
+# /auth/login is public, /auth/register needs an administrator, GraphQL is guarded by RequireSignIn.
+app.include_router(forms.router, prefix="/api/v1", dependencies=_auth)
 app.include_router(forms.auth_router, prefix="/api/v1")
 app.include_router(forms_graphql.graphql_router, prefix="/api/v1")
 

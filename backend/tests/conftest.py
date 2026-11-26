@@ -12,6 +12,7 @@ import os
 # Must be set before app.core.config is first imported anywhere.
 os.environ.setdefault("DATABASE_URL", "sqlite://")
 os.environ.setdefault("LLM_PROVIDER", "mock")
+os.environ.setdefault("ALLOW_INSECURE_DEFAULTS", "true")   # tests use the default signing secret
 
 import pytest
 from sqlalchemy import create_engine

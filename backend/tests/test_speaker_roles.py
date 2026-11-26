@@ -142,3 +142,27 @@ def test_missing_ffprobe_is_reported_not_silently_guessed(monkeypatch):
     monkeypatch.setattr(sr.shutil, "which", lambda name: None)
     _, info = sr.transcribe_with_roles(FakeProvider(), b"x", b"y", "c.wav", "left")
     assert info["source"] == "assumed" and info["reason"] == "ffprobe_missing"
+
+
+def test_transcribe_stage_runs_end_to_end(db, monkeypatch):
+    """The real pipeline stage (not just the helper): a name error here fails EVERY upload."""
+    pytest.importorskip("celery")
+    from app.models.models import Call, Transcript, TranscriptSegment
+    from app.tasks import pipeline
+
+    mono = _wav(_tone(1))
+    monkeypatch.setattr(pipeline.minio_client, "download_audio_bytes", lambda path: mono)
+    monkeypatch.setattr(pipeline.minio_client, "upload_playback_audio", lambda *a, **k: None)
+    monkeypatch.setattr(pipeline, "_normalize_audio", lambda b: b)
+    monkeypatch.setattr(pipeline, "_to_mp3", lambda b: b)
+    monkeypatch.setattr(pipeline, "get_stt_provider", lambda: FakeProvider())
+    monkeypatch.setattr(pipeline, "_touch_job", lambda *a, **k: None)
+
+    call = Call(original_filename="a.wav", storage_path="x/a.wav")
+    db.add(call)
+    db.commit()
+    segments = pipeline._stage_transcribe(db, call)
+    assert segments
+    assert call.call_metadata["speaker_roles"]["source"] in {"channel", "assumed", "unknown"}
+    assert db.query(Transcript).filter_by(call_id=call.id).count() == 1
+    assert db.query(TranscriptSegment).count() == len(segments)

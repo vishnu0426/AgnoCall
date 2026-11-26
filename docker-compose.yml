@@ -55,7 +55,7 @@ services:
       /bin/sh -c "
       mc alias set local http://minio:9000 AgnoCall AgnoCall123 &&
       mc mb --ignore-existing local/call-recordings &&
-      mc admin config set local notify_webhook:pipeline endpoint='http://backend:8000/api/v1/internal/minio-webhook' &&
+      mc admin config set local notify_webhook:pipeline endpoint='http://backend:8000/api/v1/internal/minio-webhook' auth_token='${INTERNAL_API_KEY}' &&
       mc admin service restart local &&
       sleep 3 &&
       mc event add local/call-recordings arn:minio:sqs::pipeline:webhook --event put --suffix .wav --suffix .mp3 --suffix .flac --suffix .m4a &&

@@ -24,7 +24,14 @@ def content(n_fields=1, label="Greeting"):
         for i in range(n_fields)]})
 
 
+ADMIN_USER = {"id": 1, "username": "admin", "role": "admin"}
+ANON = object()          # a signed-out visitor
+
+
 def run(db, query, variables=None, user=None):
+    # The API requires a sign-in for everything except the public form-fill operations, so tests act as an
+    # administrator unless they say otherwise.
+    user = None if user is ANON else (user or ADMIN_USER)
     return schema.execute_sync(query, variable_values=variables or {},
                                context_value=GraphQLContext(db=db, user=user))
 
@@ -99,11 +106,18 @@ def test_authenticated_non_admin_cannot_enable(db):
     assert save(db, "a", ai=True, user={"id": 1, "username": "admin", "role": "admin"}).errors is None
 
 
-def test_anonymous_can_be_forbidden_by_setting(db, monkeypatch):
+def test_non_admin_can_be_forbidden_by_setting(db, monkeypatch):
     monkeypatch.setenv("AI_FORM_EVAL_REQUIRE_ADMIN", "true")
     get_settings.cache_clear()
-    r = save(db, "a", ai=True)
+    r = save(db, "a", ai=True, user={"id": 7, "username": "bob", "role": "agent"})
     assert r.errors and "administrator" in r.errors[0].message
+
+
+def test_signed_out_visitors_are_refused_everything_but_the_public_form_page(db):
+    assert save(db, "a", ai=True, user=ANON).errors                         # cannot save or enable AI
+    assert run(db, LIMITS, user=ANON).errors                               # cannot read limits
+    assert run(db, "{ __schema { types { name } } }", user=ANON).errors    # no introspection
+    assert run(db, "{ getEvaluationForms { id } }", user=ANON).errors      # cannot list forms
 
 
 def test_kill_switch_blocks_enabling(db, monkeypatch):

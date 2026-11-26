@@ -14,9 +14,12 @@ from typing import List
 
 import bcrypt
 import jwt
-from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
+from app.core.auth import (
+    login_blocked, login_failed, login_succeeded, require_auth,
+)
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.models import EvaluationForm, EvaluationResponse, FormBuilderUser
@@ -34,23 +37,18 @@ from app.schemas.schemas import (
     UserRegisterIn,
 )
 
+def _admin_only(user: dict = Depends(require_auth)) -> dict:
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Only administrators can create accounts.")
+    return user
+
+
 router = APIRouter(prefix="/forms", tags=["Forms"])
 # FB served these at /api/auth/*; here they live under /api/v1/auth/*.
 auth_router = APIRouter(prefix="/auth", tags=["Forms Auth"])
 
 # backend/app/api/forms.py -> backend/public/uploads (mirrors FB's public/uploads)
 UPLOAD_DIR = Path(__file__).resolve().parents[2] / "public" / "uploads"
-
-
-def require_auth(authorization: str = Header(default=None)) -> dict:
-    """Port of server.js authenticateToken(): 401 without token, 403 on bad token."""
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Access denied")
-    token = authorization.split(" ", 1)[1] if " " in authorization else authorization
-    try:
-        return jwt.decode(token, get_settings().forms_jwt_secret, algorithms=["HS256"])
-    except jwt.PyJWTError:
-        raise HTTPException(status_code=403, detail="Invalid token")
 
 
 def _form_out(form: EvaluationForm) -> EvaluationFormOut:
@@ -84,16 +82,19 @@ def _response_out(resp: EvaluationResponse) -> EvaluationResponseOut:
 # --- Auth ------------------------------------------------------------------
 
 @auth_router.post("/login", response_model=TokenOut)
-def login(payload: UserAuthIn, db: Session = Depends(get_db)):
+def login(payload: UserAuthIn, request: Request, db: Session = Depends(get_db)):
+    throttle_key = f"{request.client.host if request.client else '?'}|{payload.username.lower()}"
+    if login_blocked(throttle_key):
+        raise HTTPException(status_code=429, detail="Too many attempts. Wait a few minutes and try again.")
     user = (
         db.query(FormBuilderUser)
         .filter(FormBuilderUser.username == payload.username)
         .first()
     )
-    if not user or not user.password:
+    if not user or not user.password or not bcrypt.checkpw(payload.password.encode(), user.password.encode()):
+        login_failed(throttle_key)
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    if not bcrypt.checkpw(payload.password.encode(), user.password.encode()):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    login_succeeded(throttle_key)
     token = jwt.encode(
         {
             "id": user.id,
@@ -117,8 +118,14 @@ def login(payload: UserAuthIn, db: Session = Depends(get_db)):
     )
 
 
+@auth_router.get("/me")
+def me(user: dict = Depends(require_auth)):
+    """Who the current token belongs to. The web app uses this to check a session is still valid."""
+    return {"id": user.get("id"), "username": user.get("username"), "role": user.get("role")}
+
+
 @auth_router.post("/register", response_model=RegisteredUserOut, status_code=201)
-def register(payload: UserRegisterIn, db: Session = Depends(get_db)):
+def register(payload: UserRegisterIn, db: Session = Depends(get_db), admin: dict = Depends(_admin_only)):
     hashed = bcrypt.hashpw(payload.password.encode(), bcrypt.gensalt(rounds=10)).decode()
     user = FormBuilderUser(
         username=payload.username,

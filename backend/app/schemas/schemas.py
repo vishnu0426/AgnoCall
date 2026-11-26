@@ -1,11 +1,13 @@
 from datetime import datetime
 from typing import Optional, List, Any, Dict
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field, model_validator
 
 
 class CallAccepted(BaseModel):
     call_id: str
     status: str
+    # True when this exact recording was already uploaded: call_id is the existing call, nothing new was made.
+    duplicate: bool = False
 
 
 class CallSummary(BaseModel):
@@ -94,6 +96,20 @@ class ComplianceViolationOut(BaseModel):
     evidence: Optional[str]
     reviewed: bool
     review_outcome: Optional[str]
+
+    @model_validator(mode="after")
+    def _tidy_rule(self):
+        # One name per rule, whatever wording the AI used (see app/core/compliance_rules.py).
+        from app.core import compliance_rules as cr
+        self.category = cr.rule_category(self.rule_code, self.category)
+        self.rule_code = cr.normalise_code(self.rule_code)
+        return self
+
+    @computed_field
+    @property
+    def rule_label(self) -> str:
+        from app.core import compliance_rules as cr
+        return cr.rule_label(self.rule_code)
 
     class Config:
         from_attributes = True
@@ -240,6 +256,7 @@ class AgentDetail(AgentSummary):
 
 class ComplianceRuleBreakdown(BaseModel):
     rule_code: str
+    label: str
     category: str
     count: int
 
@@ -248,6 +265,7 @@ class ComplianceViolationWithCallOut(ComplianceViolationOut):
     call_id: str
     call_filename: str
     agent_name: Optional[str]
+    call_date: Optional[datetime] = None
 
 
 class ProcessingJobOut(BaseModel):

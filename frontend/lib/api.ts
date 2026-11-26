@@ -4,6 +4,50 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.
 /** How long a normal API call may take before the page gives up and shows an error. */
 const REQUEST_TIMEOUT_MS = 20_000;
 
+const TOKEN_KEY = "forms_jwt";
+const SESSION_COOKIE = "forms_session";
+
+/** The sign-in token: from the browser's storage in the browser, from the session cookie on the server. */
+async function sessionToken(): Promise<string | null> {
+  if (typeof window !== "undefined") {
+    try {
+      return window.localStorage.getItem(TOKEN_KEY);
+    } catch {
+      return null;
+    }
+  }
+  try {
+    const { cookies } = await import("next/headers");
+    return (await cookies()).get(SESSION_COOKIE)?.value ?? null;
+  } catch {
+    return null; // not inside a request (e.g. during build)
+  }
+}
+
+/** Every API request carries the sign-in token; the API refuses anything without a valid one. */
+async function withAuth(init: RequestInit): Promise<RequestInit> {
+  const token = await sessionToken();
+  if (!token) return init;
+  const headers = new Headers(init.headers);
+  if (!headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+  return { ...init, headers };
+}
+
+/** The API said the session is no longer valid: forget it and go to the sign-in page. */
+function signedOut() {
+  try {
+    window.localStorage.removeItem(TOKEN_KEY);
+    window.localStorage.removeItem("forms_user");
+  } catch {
+    /* storage unavailable */
+  }
+  document.cookie = `${SESSION_COOKIE}=; path=/; max-age=0`;
+  if (!window.location.pathname.startsWith("/login")) {
+    const next = encodeURIComponent(window.location.pathname + window.location.search);
+    window.location.href = `/login?reason=expired&next=${next}`;
+  }
+}
+
 /**
  * fetch() with a deadline. Without one, a server that accepts the connection but never answers (for
  * example an API whose worker process died) leaves the page on its loading skeleton forever: the request
@@ -13,7 +57,9 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}, ms = REQUES
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
   try {
-    return await fetch(url, { ...init, signal: init.signal ?? controller.signal });
+    const res = await fetch(url, await withAuth({ ...init, signal: init.signal ?? controller.signal }));
+    if ((res.status === 401 || res.status === 403) && typeof window !== "undefined") signedOut();
+    return res;
   } catch (e) {
     if (controller.signal.aborted) {
       throw new Error("The server did not respond in time. Check that the API is running, then try again.");
@@ -361,6 +407,7 @@ export interface QAEvaluation {
 export interface ComplianceViolation {
   id: string;
   rule_code: string;
+  rule_label?: string;
   category: string;
   severity: "low" | "medium" | "high" | "critical";
   timestamp_ref: number | null;
@@ -505,6 +552,7 @@ export interface AgentDetail extends AgentSummary {
 
 export interface ComplianceRuleBreakdown {
   rule_code: string;
+  label: string;
   category: string;
   count: number;
 }
@@ -513,6 +561,7 @@ export interface ComplianceViolationWithCall extends ComplianceViolation {
   call_id: string;
   call_filename: string;
   agent_name: string | null;
+  call_date: string | null;
 }
 
 export interface ComplianceSummary {
@@ -763,9 +812,9 @@ export const api = {
     const form = new FormData();
     form.append("file", file);
     if (agentName) form.append("agent_name", agentName);
-    const res = await fetch(`${API_BASE}/calls`, { method: "POST", body: form });
+    const res = await fetchWithTimeout(`${API_BASE}/calls`, { method: "POST", body: form }, 10 * 60_000);
     if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
-    return res.json() as Promise<{ call_id: string; status: string }>;
+    return res.json() as Promise<{ call_id: string; status: string; duplicate?: boolean }>;
   },
 };
 

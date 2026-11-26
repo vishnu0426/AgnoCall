@@ -11,6 +11,7 @@ auto-created "system" user) so forms can always be saved.
 import json
 import logging
 import time
+import uuid
 from datetime import datetime
 from typing import List, Optional
 from urllib.parse import urlencode
@@ -21,11 +22,13 @@ import strawberry
 from fastapi import Depends, Request
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
+from strawberry.extensions import SchemaExtension
 from strawberry.fastapi import BaseContext, GraphQLRouter
 from strawberry.schema.config import StrawberryConfig
 
 from app.core.config import get_settings
 from app.core import settings_store as store
+from app.core.auth import user_from_request
 from app.core.database import get_db
 from app.core.ids import is_uuid
 from app.models.models import EvaluationForm, EvaluationFormVersion, EvaluationResponse, FormBuilderUser
@@ -40,20 +43,8 @@ class GraphQLContext(BaseContext):
         self.user = user
 
 
-def _user_from_request(request: Request) -> Optional[dict]:
-    """Parse an optional `Authorization: Bearer <jwt>` header (never enforced)."""
-    auth_header = request.headers.get("authorization")
-    if not auth_header:
-        return None
-    token = auth_header.split(" ", 1)[1] if " " in auth_header else auth_header
-    try:
-        return jwt.decode(token, get_settings().forms_jwt_secret, algorithms=["HS256"])
-    except jwt.PyJWTError:
-        return None
-
-
 def get_context(request: Request, db: Session = Depends(get_db)) -> GraphQLContext:
-    return GraphQLContext(db=db, user=_user_from_request(request))
+    return GraphQLContext(db=db, user=user_from_request(request))
 
 
 def _get_creator_id(db: Session, context: GraphQLContext) -> int:
@@ -623,7 +614,7 @@ class Mutation:
         name = (title or "").strip() or f"Copy of {src.title}"
         actor = _actor(info.context)
         copy = EvaluationForm(
-            form_id=f"form_{int(time.time() * 1000)}",
+            form_id=f"form_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}",
             title=name[:255],
             form_content=json.loads(json.dumps(src.form_content)),     # deep copy
             created_by=_get_creator_id(db, info.context),
@@ -850,13 +841,29 @@ class Mutation:
         return deleted > 0
 
 
+# The only operations a signed-out visitor may run: the public form-fill page (/forms/f/<id>) opens one
+# form and submits one response. Everything else, including schema introspection, needs a sign-in.
+PUBLIC_FIELDS = {"getEvaluationForm", "saveEvaluationResponse"}
+
+
+class RequireSignIn(SchemaExtension):
+    def resolve(self, _next, root, info, *args, **kwargs):
+        if info.path.prev is None and info.context.user is None and info.field_name not in PUBLIC_FIELDS:
+            raise PermissionError("Sign in required")
+        return _next(root, info, *args, **kwargs)
+
+
 schema = strawberry.Schema(
     query=Query,
     mutation=Mutation,
+    extensions=[RequireSignIn],
     # keep form_id / createdAt / getEvaluationForms verbatim on the wire
     config=StrawberryConfig(auto_camel_case=False),
 )
 
 # Mounted at /api/v1/graphql by main.py (the frontend's Apollo link targets
 # `${NEXT_PUBLIC_API_BASE_URL}/graphql`).
-graphql_router = GraphQLRouter(schema, context_getter=get_context, path="/graphql")
+graphql_router = GraphQLRouter(
+    schema, context_getter=get_context, path="/graphql",
+    graphql_ide="graphiql" if get_settings().api_docs_enabled else None,
+)

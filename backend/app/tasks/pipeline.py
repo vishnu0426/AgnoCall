@@ -29,7 +29,7 @@ from app.models.models import (
     CallInsight, EvaluationForm, EvaluationResponse,
 )
 from app.core.config import get_settings
-from app.core import settings_store as store
+from app.core import compliance_rules, settings_store as store
 from app.storage import minio_client
 from app.tasks import form_eval, rubric, speaker_roles
 from app.tasks.providers import get_stt_provider, get_llm_provider
@@ -294,7 +294,7 @@ def _stage_transcribe(db, call: Call) -> list[dict]:
     # Stereo recordings: each channel is one side of the call, so the role comes from the channel and
     # never from a diarization guess. How the roles were decided is kept on the call.
     segments, role_info = speaker_roles.transcribe_with_roles(
-        provider, source_audio, audio_bytes, call.original_filename, settings.stereo_agent_channel)
+        provider, source_audio, audio_bytes, call.original_filename, get_settings().stereo_agent_channel)
     call.call_metadata = {**(call.call_metadata or {}), "speaker_roles": role_info}
 
     transcript = Transcript(
@@ -452,8 +452,8 @@ def _stage_compliance(db, call: Call, segments: list[dict], analysis: dict):
     for v in analysis.get("compliance_violations", []):
         db.add(ComplianceViolation(
             call_id=call.id,
-            rule_code=v.get("rule_code", "UNKNOWN"),
-            category=v.get("category", "general"),
+            rule_code=compliance_rules.normalise_code(v.get("rule_code")),
+            category=compliance_rules.rule_category(v.get("rule_code"), v.get("category")),
             severity=v.get("severity", "medium"),
             timestamp_ref=v.get("timestamp"),
             explanation=v.get("explanation"),

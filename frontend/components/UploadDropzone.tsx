@@ -18,8 +18,15 @@ export default function UploadDropzone() {
     setUploading(true);
     setError(null);
     try {
+      const repeats: string[] = [];
       for (const file of Array.from(files)) {
-        await api.uploadCall(file, agentName.trim() || undefined);
+        const r = await api.uploadCall(file, agentName.trim() || undefined);
+        if (r.duplicate) repeats.push(file.name);
+      }
+      if (repeats.length) {
+        setError(
+          `${repeats.length === 1 ? `"${repeats[0]}" was` : `${repeats.length} files were`} already uploaded, so nothing new was added.`,
+        );
       }
       router.refresh();
     } catch (e: any) {

@@ -1,3 +1,4 @@
+import hashlib
 import csv
 import io
 from datetime import datetime, timedelta
@@ -137,6 +138,19 @@ async def upload_call(
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, f"Unsupported file type .{ext}. Allowed: {sorted(ALLOWED_EXTENSIONS)}")
 
+    # The same recording uploaded twice would be analysed twice and counted twice in every average, so an
+    # identical file (same content) returns the existing call instead of making a new one.
+    file_bytes = await file.read()
+    digest = hashlib.sha256(file_bytes).hexdigest()
+    existing = (
+        db.query(Call)
+        .filter(Call.call_metadata["content_sha256"].as_string() == digest, Call.status != CallStatus.failed)
+        .order_by(Call.uploaded_at.asc())
+        .first()
+    )
+    if existing:
+        return CallAccepted(call_id=existing.id, status=existing.status.value, duplicate=True)
+
     # Explicit agent from the form wins. (This used to look up
     # `external_agent_id == None` when only a name was given, which matched an
     # arbitrary unrelated agent and attributed the call to the wrong person.)
@@ -148,12 +162,12 @@ async def upload_call(
         status=CallStatus.uploaded,
         agent_id=agent.id if agent else None,
         call_date=datetime.fromisoformat(call_date) if call_date else datetime.utcnow(),
+        call_metadata={"content_sha256": digest},
     )
     db.add(call)
     apply_filename_metadata(db, call)  # fills agent from the filename only if none was given
     db.flush()  # assigns call.id without committing yet
 
-    file_bytes = await file.read()
     object_key = minio_client.upload_audio(call.id, file.filename, file_bytes, file.content_type)
     call.storage_path = object_key
     db.commit()

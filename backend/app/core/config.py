@@ -83,6 +83,13 @@ class Settings(BaseSettings):
     # Forms module (ported from the Form Builder project): secret used to sign
     # and verify the form-builder JWTs (FB's JWT_SECRET env var).
     forms_jwt_secret: str = "form_builder_secret_key"
+    # Key for machine callers that cannot sign in (the MinIO webhook). Set the same value as the MinIO
+    # webhook `auth_token`. Empty = the webhook is refused (the periodic sync still picks files up).
+    internal_api_key: str = ""
+    # Interactive API docs (/docs, /redoc, /openapi.json, GraphiQL) list every endpoint: off unless asked for.
+    api_docs_enabled: bool = False
+    # Refuse to start with a weak/default FORMS_JWT_SECRET. Only set true for local development and tests.
+    allow_insecure_defaults: bool = False
 
     # Form-driven AI evaluation (forms flagged `ai_enabled` are scored by the
     # LLM on every new call). Each enabled form costs one LLM call per call

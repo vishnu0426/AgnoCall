@@ -137,6 +137,8 @@ RUN = """mutation($c: String!, $f: String!) { runAIFormEvaluation(call_id: $c, f
 
 
 def gql(db, q, v, user=None):
+    # Everything except the public form page needs a sign-in; tests act as an administrator by default.
+    user = user or {"id": 1, "username": "admin", "role": "admin"}
     return schema.execute_sync(q, variable_values=v, context_value=GraphQLContext(db=db, user=user))
 
 

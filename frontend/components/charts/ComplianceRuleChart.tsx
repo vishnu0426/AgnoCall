@@ -13,11 +13,11 @@ export default function ComplianceRuleChart({ data }: { data: ComplianceRuleBrea
         <XAxis type="number" tick={{ fontSize: 11, fill: "#6C7488" }} axisLine={{ stroke: "#E2E5EC" }} tickLine={false} allowDecimals={false} />
         <YAxis
           type="category"
-          dataKey="rule_code"
+          dataKey="label"
           tick={{ fontSize: 11, fill: "#4B5468" }}
           axisLine={false}
           tickLine={false}
-          width={200}
+          width={170}
         />
         <Tooltip contentStyle={{ background: "#FFFFFF", border: "1px solid #E2E5EC", borderRadius: 6, fontSize: 12 }} />
         <Bar dataKey="count" fill="#2F6FED" radius={[0, 3, 3, 0]} />

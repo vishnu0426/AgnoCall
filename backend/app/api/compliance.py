@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 
+from app.core import compliance_rules as cr
 from app.core.database import get_db, get_read_db
 from app.models.models import Call, CallStatus, ComplianceViolation
 from app.schemas.schemas import ComplianceSummary, ComplianceRuleBreakdown, ComplianceViolationWithCallOut
@@ -24,12 +25,17 @@ def compliance_summary(db: Session = Depends(get_read_db)):
         if total_processed else None
     )
 
-    by_rule_rows = (
+    # Grouped by rule code only: the AI's free-text category differs call to call for the same rule.
+    # Rows are merged in Python because codes may differ in case or punctuation ("Greeting missing").
+    merged: dict = {}
+    for code, raw_cat, n in (
         db.query(ComplianceViolation.rule_code, ComplianceViolation.category, func.count(ComplianceViolation.id))
-        .group_by(ComplianceViolation.rule_code, ComplianceViolation.category)
-        .order_by(func.count(ComplianceViolation.id).desc())
-        .all()
-    )
+        .group_by(ComplianceViolation.rule_code, ComplianceViolation.category).all()
+    ):
+        c = cr.normalise_code(code)
+        entry = merged.setdefault(c, [cr.rule_category(c, raw_cat), 0])
+        entry[1] += n
+    by_rule_rows = sorted(((c, v[0], v[1]) for c, v in merged.items()), key=lambda r: -r[2])
     by_severity = dict(
         db.query(ComplianceViolation.severity, func.count(ComplianceViolation.id))
         .group_by(ComplianceViolation.severity).all()
@@ -42,7 +48,7 @@ def compliance_summary(db: Session = Depends(get_read_db)):
         .join(Call, Call.id == ComplianceViolation.call_id)
         .options(joinedload(ComplianceViolation.call).joinedload(Call.agent))
         .order_by(Call.uploaded_at.desc())
-        .limit(20)
+        .limit(60)
         .all()
     )
 
@@ -50,11 +56,12 @@ def compliance_summary(db: Session = Depends(get_read_db)):
         total_processed_calls=total_processed,
         calls_with_violations=calls_with_violations,
         clean_call_percent=clean_percent,
-        by_rule=[ComplianceRuleBreakdown(rule_code=r, category=c, count=n) for r, c, n in by_rule_rows],
+        by_rule=[ComplianceRuleBreakdown(rule_code=r, label=cr.rule_label(r), category=c, count=n) for r, c, n in by_rule_rows],
         by_severity=by_severity,
         recent_violations=[
             ComplianceViolationWithCallOut(
                 id=v.id, rule_code=v.rule_code, category=v.category, severity=v.severity,
+                call_date=v.call.call_date or v.call.uploaded_at,
                 timestamp_ref=v.timestamp_ref, explanation=v.explanation, evidence=v.evidence,
                 reviewed=v.reviewed, review_outcome=v.review_outcome,
                 call_id=v.call_id, call_filename=v.call.original_filename,
