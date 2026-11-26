@@ -131,6 +131,7 @@ class DeepgramProvider(STTProvider):
     dependency approach OllamaProvider takes below.
     """
     compatible_modes = {"cloud", "hybrid"}
+    supports_channel_split = True  # one channel per call, so any single-channel call can be sent as-is
 
     def __init__(self):
         if not settings.deepgram_api_key:
@@ -161,7 +162,10 @@ class DeepgramProvider(STTProvider):
                 # Speaker 0 is assumed to be the agent since agents answer
                 # and open the call in the support-line recordings this
                 # pipeline processes.
-                "speaker_role": "agent" if u["speaker"] == 0 else "customer",
+                # Only used for mono recordings; stereo calls get roles from the channel
+                # (see speaker_roles.py). A third voice is "unknown", not silently the customer.
+                "speaker_role": {0: "agent", 1: "customer"}.get(u["speaker"], "unknown"),
+                "speaker_id": f"spk{u['speaker']}",
                 "start_time": round(u["start"], 1),
                 "end_time": round(u["end"], 1),
                 "text": u["transcript"],
@@ -177,6 +181,7 @@ class GoogleSTTProvider(STTProvider):
     client convention.
     """
     compatible_modes = {"cloud", "hybrid"}
+    supports_channel_split = True
 
     def __init__(self):
         if not settings.google_application_credentials:
@@ -209,8 +214,8 @@ class GoogleSTTProvider(STTProvider):
         segments = []
         current = None
         for w in last_alternative.words:
-            role = "agent" if w.speaker_tag == 1 else "customer"
-            if current and current["speaker_role"] == role:
+            role = {1: "agent", 2: "customer"}.get(w.speaker_tag, "unknown")
+            if current and current["speaker_id"] == f"spk{w.speaker_tag}":
                 current["text"] += f" {w.word}"
                 current["end_time"] = round(w.end_time.total_seconds(), 1)
             else:
@@ -219,6 +224,7 @@ class GoogleSTTProvider(STTProvider):
                 current = {
                     "sequence": len(segments),
                     "speaker_role": role,
+                    "speaker_id": f"spk{w.speaker_tag}",
                     "start_time": round(w.start_time.total_seconds(), 1),
                     "end_time": round(w.end_time.total_seconds(), 1),
                     "text": w.word,

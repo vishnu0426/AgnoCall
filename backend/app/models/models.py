@@ -121,6 +121,8 @@ class TranscriptSegment(Base):
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     transcript_id = Column(UUID(as_uuid=False), ForeignKey("transcripts.id"), nullable=False)
     speaker_role = Column(String, default="unknown")  # agent | customer | unknown
+    # Who the STT thinks is talking (diarization cluster or channel), kept apart from the resolved role.
+    speaker_id = Column(String, nullable=True)
     sequence = Column(Integer, nullable=False)
     start_time = Column(Float, nullable=False)
     end_time = Column(Float, nullable=False)

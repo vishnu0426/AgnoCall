@@ -62,6 +62,8 @@ class Settings(BaseSettings):
     # Path to a Google Cloud service account JSON key (same convention as
     # GOOGLE_APPLICATION_CREDENTIALS used by the google-cloud-speech client).
     google_application_credentials: str = ""
+    # Stereo recordings: which channel of the PBX recording is the agent ("left" or "right").
+    stereo_agent_channel: str = "left"
 
     # Forms module (ported from the Form Builder project): secret used to sign
     # and verify the form-builder JWTs (FB's JWT_SECRET env var).

@@ -87,6 +87,10 @@ def _ensure_incremental_columns():
             conn.execute(text(
                 "ALTER TABLE manual_qa_criteria_scores ALTER COLUMN manual_score DROP NOT NULL"
             ))
+    if "transcript_segments" in inspector.get_table_names():
+        if "speaker_id" not in {c["name"] for c in inspector.get_columns("transcript_segments")}:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE transcript_segments ADD COLUMN IF NOT EXISTS speaker_id VARCHAR"))
     # Forms module: call_id links an evaluation-form submission to the call
     # it scored; added after rec_app_evaluation_responses first shipped.
     if "rec_app_evaluation_responses" in inspector.get_table_names():

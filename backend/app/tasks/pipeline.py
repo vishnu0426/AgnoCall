@@ -31,7 +31,7 @@ from app.models.models import (
 from app.core.config import get_settings
 from app.core import settings_store as store
 from app.storage import minio_client
-from app.tasks import form_eval, rubric
+from app.tasks import form_eval, rubric, speaker_roles
 from app.tasks.providers import get_stt_provider, get_llm_provider
 
 logger = logging.getLogger("agnocall.form_eval")
@@ -281,7 +281,8 @@ def compute_waveform_peaks(wav_bytes: bytes, buckets: int = 600) -> list[float]:
 
 def _stage_transcribe(db, call: Call) -> list[dict]:
     _touch_job(db, call.id, JobStage.speech, JobStatus.running)
-    audio_bytes = _normalize_audio(minio_client.download_audio_bytes(call.storage_path))
+    source_audio = minio_client.download_audio_bytes(call.storage_path)
+    audio_bytes = _normalize_audio(source_audio)
     # The normalized WAV feeds the STT provider; a compact MP3 copy plus
     # precomputed waveform peaks make browser playback near-instant (the
     # untouched original is never re-encoded in place — see
@@ -290,7 +291,11 @@ def _stage_transcribe(db, call: Call) -> list[dict]:
     call.call_metadata = {**(call.call_metadata or {}), "waveform_peaks": compute_waveform_peaks(audio_bytes)}
     db.commit()
     provider = get_stt_provider()
-    segments = provider.transcribe(audio_bytes, call.original_filename)
+    # Stereo recordings: each channel is one side of the call, so the role comes from the channel and
+    # never from a diarization guess. How the roles were decided is kept on the call.
+    segments, role_info = speaker_roles.transcribe_with_roles(
+        provider, source_audio, audio_bytes, call.original_filename, settings.stereo_agent_channel)
+    call.call_metadata = {**(call.call_metadata or {}), "speaker_roles": role_info}
 
     transcript = Transcript(
         call_id=call.id,
@@ -303,6 +308,7 @@ def _stage_transcribe(db, call: Call) -> list[dict]:
         db.add(TranscriptSegment(
             transcript_id=transcript.id,
             speaker_role=s["speaker_role"],
+            speaker_id=s.get("speaker_id"),
             sequence=s["sequence"],
             start_time=s["start_time"],
             end_time=s["end_time"],
@@ -310,7 +316,7 @@ def _stage_transcribe(db, call: Call) -> list[dict]:
             text_unmasked=s["text"],
             stt_confidence=s["confidence"],
         ))
-    call.duration_seconds = int(segments[-1]["end_time"]) if segments else 0
+    call.duration_seconds = int(max(s["end_time"] for s in segments)) if segments else 0
     call.language = "en"
     db.commit()
     _touch_job(db, call.id, JobStage.speech, JobStatus.succeeded)
