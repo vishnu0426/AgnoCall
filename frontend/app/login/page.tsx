@@ -38,7 +38,6 @@ function LoginForm() {
   const [capsLock, setCapsLock] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [existing, setExisting] = useState<string | null>(null);
   const [refocusPassword, setRefocusPassword] = useState(false);
   // False until React has taken over the page. Before that a submit would be a plain browser form
   // submission, which would put the username and password in the address bar, history and server logs.
@@ -47,14 +46,14 @@ function LoginForm() {
   const userRef = useRef<HTMLInputElement>(null);
   const passRef = useRef<HTMLInputElement>(null);
 
-  // Someone who is already signed in should be told so, not asked to sign in again blindly.
+  // Reaching this page means there is no valid session (the page gate sent us here), so drop any
+  // leftover sign-in data from an earlier visit.
   useEffect(() => {
     try {
-      const token = window.localStorage.getItem("forms_jwt");
-      const name = window.localStorage.getItem("forms_user");
-      setExisting(token && name ? name : null);
+      window.localStorage.removeItem("forms_jwt");
+      window.localStorage.removeItem("forms_user");
     } catch {
-      setExisting(null);
+      /* storage unavailable */
     }
   }, []);
 
@@ -98,6 +97,16 @@ function LoginForm() {
       const data = await res.json();
       window.localStorage.setItem("forms_jwt", data.token);
       window.localStorage.setItem("forms_user", data.user?.username ?? name);
+      // The page gate (middleware.ts) reads this cookie; it expires with the token.
+      const exp = (() => {
+        try {
+          return JSON.parse(atob(String(data.token).split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).exp;
+        } catch {
+          return null;
+        }
+      })();
+      const maxAge = typeof exp === "number" ? Math.max(0, Math.floor(exp - Date.now() / 1000)) : 8 * 3600;
+      document.cookie = `forms_session=${data.token}; path=/; max-age=${maxAge}; samesite=lax`;
       router.replace(next);
       router.refresh();
     } catch {
@@ -107,16 +116,6 @@ function LoginForm() {
       clearTimeout(timer);
       setBusy(false);
     }
-  }
-
-  function signOutHere() {
-    try {
-      window.localStorage.removeItem("forms_jwt");
-      window.localStorage.removeItem("forms_user");
-    } catch {
-      /* storage unavailable */
-    }
-    setExisting(null);
   }
 
   return (
@@ -184,19 +183,6 @@ function LoginForm() {
             <div role="status" className="mt-6 flex gap-2.5 rounded-lg border border-[#9C6510]/30 bg-[#9C6510]/8 px-3.5 py-3 text-[13.5px] text-[#7A4E0C]">
               <Info className="mt-0.5 h-4 w-4 shrink-0" />
               Your session expired. Please sign in again.
-            </div>
-          )}
-          {existing && (
-            <div className="mt-6 rounded-lg border border-hairline bg-panelRaised px-3.5 py-3 text-[13.5px] text-muted">
-              You are already signed in as <b className="text-ink">{existing}</b>.{" "}
-              <a href={next} className="font-medium text-accent hover:underline">
-                Continue
-              </a>{" "}
-              or{" "}
-              <button type="button" onClick={signOutHere} className="font-medium text-accent hover:underline">
-                sign in as someone else
-              </button>
-              .
             </div>
           )}
 

@@ -34,6 +34,7 @@ export default function Sidebar() {
     } catch {
       /* storage unavailable */
     }
+    document.cookie = "forms_session=; path=/; max-age=0";
     setUser(null);
     window.location.href = "/login";
   }
