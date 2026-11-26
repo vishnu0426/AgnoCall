@@ -7,7 +7,7 @@ celery_app = Celery(
     "AgnoCall",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["app.tasks.pipeline", "app.tasks.sync"],
+    include=["app.tasks.pipeline", "app.tasks.sync", "app.tasks.reports"],
 )
 
 celery_app.conf.update(
@@ -27,6 +27,7 @@ celery_app.conf.update(
         "app.tasks.pipeline.backfill_form_evaluation": {"queue": "priority-reprocess"},
         "app.tasks.sync.sync_call_records": {"queue": "priority-reprocess"},
         "app.tasks.sync.reap_stale_processing": {"queue": "priority-reprocess"},
+        "app.tasks.reports.run_due_reports": {"queue": "priority-reprocess"},
     },
     # Poll-based fallback for call-records/ ingestion when MinIO's push
     # webhook can't reach this backend (see app/tasks/sync.py). This entry
@@ -46,6 +47,12 @@ celery_app.conf.update(
         # worker handling them died mid-task -- see reap_stale_processing's
         # docstring. 5 minutes is frequent enough to recover promptly without
         # meaningfully adding to priority-reprocess's load.
+        # Emails any scheduled report that has come due (Settings > Scheduled reports).
+        "run-due-reports": {
+            "task": "app.tasks.reports.run_due_reports",
+            "schedule": 60.0,
+            "options": {"expires": 55.0},
+        },
         "reap-stale-processing": {
             "task": "app.tasks.sync.reap_stale_processing",
             "schedule": 300.0,

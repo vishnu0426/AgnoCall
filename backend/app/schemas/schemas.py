@@ -353,6 +353,7 @@ class QACalibration(BaseModel):
 
 class CategoryStat(BaseModel):
     category: str
+    key: Optional[str] = None  # raw category value, what the Calls page filters on
     count: int
     avg_sentiment: Optional[float] = None
     avg_qa: Optional[float] = None
@@ -360,6 +361,11 @@ class CategoryStat(BaseModel):
 
 class AnalyticsOverview(BaseModel):
     kpis: dict
+    kpis_previous: Optional[dict] = None   # same KPIs for the period before (only when a period is chosen)
+    quality: dict                          # how much of what was processed is a real conversation
+    attention: dict                        # {"total": n, "items": [calls to look at first, with reasons]}
+    generated_at: str
+    days: Optional[int] = None
     volume_heatmap: List[HeatmapCell]
     agent_criteria_heatmap: List[HeatmapCell]
     category_stats: List[CategoryStat]

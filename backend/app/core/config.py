@@ -65,6 +65,21 @@ class Settings(BaseSettings):
     # Stereo recordings: which channel of the PBX recording is the agent ("left" or "right").
     stereo_agent_channel: str = "left"
 
+    # Outgoing email for scheduled reports (Settings > Scheduled reports). Leave SMTP_HOST empty to turn
+    # sending off; schedules can still be created and are reported as "SMTP not configured".
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_security: str = "starttls"      # starttls (port 587) | ssl (port 465) | none (plain, internal relay only)
+    smtp_from: str = ""                  # e.g. "AgnoCall Reports <reports@yourcompany.com>"
+    smtp_timeout_seconds: int = 20
+    # The clock schedules are read in ("08:00" means 08:00 here). An IANA name such as Asia/Kolkata.
+    report_timezone: str = "UTC"
+    report_max_recipients: int = 20
+    # The one standard message at the top of every report email. "\\n" in .env means a line break.
+    report_message: str = "Hello,\n\nHere is your scheduled AgnoCall analytics report. It covers real conversations only: IVR surveys, silent and very short recordings are left out of the averages and counted separately. The attached report has the full analytics: key metrics, categories, topics, sentiment, emotions, call volume, agent scores and how the AI compares with your reviewers.\n\nThis message is sent automatically."
+
     # Forms module (ported from the Form Builder project): secret used to sign
     # and verify the form-builder JWTs (FB's JWT_SECRET env var).
     forms_jwt_secret: str = "form_builder_secret_key"
@@ -83,6 +98,11 @@ class Settings(BaseSettings):
     # Upper bound on calls one backfill request may queue (each = 1 LLM call).
     ai_form_eval_backfill_max_calls: int = 1000
 
+    # Analytics only averages real conversations: a recording shorter than this (words or seconds) is an IVR
+    # survey, a dropped call or a "hello?" and is reported separately instead of dragging the averages down.
+    analytics_min_words: int = 50
+    analytics_min_seconds: int = 15
+
     class Config:
         env_file = ".env"
 
@@ -96,6 +116,24 @@ class Settings(BaseSettings):
         # written either way without silently breaking the client at import
         # time (minio_client.py constructs both clients at module load).
         return re.sub(r"^https?://", "", value).rstrip("/")
+
+    @field_validator("smtp_security")
+    @classmethod
+    def _valid_smtp_security(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in {"starttls", "ssl", "none"}:
+            raise ValueError("SMTP_SECURITY must be starttls, ssl or none.")
+        return value
+
+    @field_validator("report_timezone")
+    @classmethod
+    def _valid_timezone(cls, value: str) -> str:
+        from zoneinfo import ZoneInfo
+        try:
+            ZoneInfo(value.strip())
+        except Exception:
+            raise ValueError(f"REPORT_TIMEZONE={value!r} is not a time zone name (for example 'UTC' or 'Asia/Kolkata').")
+        return value.strip()
 
     @field_validator("minio_bucket")
     @classmethod

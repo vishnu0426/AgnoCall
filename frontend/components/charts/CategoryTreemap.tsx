@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ResponsiveContainer, Treemap, Tooltip } from "recharts";
 import { CategoryStat } from "@/lib/api";
 
@@ -32,19 +34,30 @@ function labelColor(hex: string): string {
 }
 
 function Cell(props: any) {
-  const { x, y, width, height, name, count, avg_sentiment } = props;
-  if (width <= 0 || height <= 0 || name == null) return null;
+  const { x, y, width, height, name, count, avg_sentiment, categoryKey, depth, index, onOpen } = props;
+  // recharts also draws the root node; only real categories are tiles
+  if (width <= 0 || height <= 0 || name == null || !depth) return null;
+  const clipId = `tile-${index}-${Math.round(x)}-${Math.round(y)}`;
   const fill = sentimentFill(avg_sentiment ?? null);
   const ink = labelColor(fill);
   const showName = width > 74 && height > 34;
   const showCount = width > 74 && height > 54;
   return (
-    <g>
+    <g
+      role="link"
+      tabIndex={0}
+      aria-label={`${name}: ${count} call${count === 1 ? "" : "s"}. Open the list.`}
+      style={{ cursor: "pointer", outline: "none" }}
+      onClick={() => onOpen?.(categoryKey)}
+      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onOpen?.(categoryKey)}
+    >
+      <clipPath id={clipId}><rect x={x} y={y} width={width} height={height} /></clipPath>
       {/* 2px white stroke = the surface gap between adjacent tiles */}
       <rect x={x} y={y} width={width} height={height} rx={3} fill={fill} stroke="#FFFFFF" strokeWidth={2} />
       {showName && (
-        <text x={x + 9} y={y + 20} fontSize={12} fontWeight={500} fill={ink} style={{ textTransform: "capitalize" }}>
-          {String(name).length > width / 7 ? String(name).slice(0, Math.floor(width / 7)) + "…" : name}
+        <text x={x + 9} y={y + 20} fontSize={12} fontWeight={500} fill={ink} clipPath={`url(#${clipId})`}
+          style={{ textTransform: "capitalize" }}>
+          {String(name).length > (width - 18) / 7 ? String(name).slice(0, Math.max(1, Math.floor((width - 18) / 7) - 1)) + "…" : name}
         </text>
       )}
       {showCount && (
@@ -56,13 +69,18 @@ function Cell(props: any) {
   );
 }
 
-export default function CategoryTreemap({ stats }: { stats: CategoryStat[] }) {
+export default function CategoryTreemap({ stats, scope = "" }: { stats: CategoryStat[]; scope?: string }) {
+  const router = useRouter();
+  // A tile opens the Calls page for that category, limited to real conversations and the same period/agent.
+  const callsHref = (key?: string | null) =>
+    `/calls?${[scope, "conversation=true", key ? `category=${encodeURIComponent(key)}` : ""].filter(Boolean).join("&")}`;
   if (stats.length === 0) {
     return <div className="text-[12.5px] text-muted py-6 text-center">No categorized calls yet.</div>;
   }
 
   const data = stats.map((s) => ({
     name: s.category,
+    categoryKey: s.key ?? s.category.replace(/ /g, "_"),
     size: s.count,
     count: s.count,
     avg_sentiment: s.avg_sentiment,
@@ -72,7 +90,7 @@ export default function CategoryTreemap({ stats }: { stats: CategoryStat[] }) {
   return (
     <div>
       <ResponsiveContainer width="100%" height={300}>
-        <Treemap data={data} dataKey="size" aspectRatio={4 / 3} content={<Cell />} isAnimationActive={false}>
+        <Treemap data={data} dataKey="size" aspectRatio={4 / 3} content={<Cell onOpen={(key: string) => router.push(callsHref(key))} />} isAnimationActive={false}>
           <Tooltip
             contentStyle={{ background: "#FFFFFF", border: "1px solid #E2E5EC", borderRadius: 6, fontSize: 12 }}
             formatter={() => null as any}
@@ -87,6 +105,7 @@ export default function CategoryTreemap({ stats }: { stats: CategoryStat[] }) {
                     {p.avg_qa != null && <> · avg QA {p.avg_qa}</>}
                     {p.avg_sentiment != null && <> · sentiment {p.avg_sentiment > 0 ? "+" : ""}{p.avg_sentiment}</>}
                   </div>
+                  <div className="text-faint">Click to open these calls</div>
                 </div>
               );
             }}
@@ -99,6 +118,26 @@ export default function CategoryTreemap({ stats }: { stats: CategoryStat[] }) {
         <div className="h-2 w-24 rounded-full" style={{ background: `linear-gradient(to right, ${DIV_LOW}, ${DIV_MID}, ${DIV_HIGH})` }} />
         <span>positive sentiment</span>
       </div>
+      <details className="mt-3 text-[12.5px]">
+        <summary className="cursor-pointer text-muted hover:text-ink">View as a table</summary>
+        <table className="mt-2 w-full text-left">
+          <thead className="text-[11px] uppercase tracking-wide text-faint">
+            <tr><th className="py-1 font-medium">Category</th><th className="font-medium">Calls</th><th className="font-medium">Avg QA</th><th className="font-medium">Sentiment</th></tr>
+          </thead>
+          <tbody>
+            {data.map((d) => (
+              <tr key={d.name} className="border-t border-hairline">
+                <td className="py-1.5 capitalize">
+                  <Link href={callsHref(d.categoryKey)} className="text-accent hover:underline">{d.name}</Link>
+                </td>
+                <td className="tabular">{d.count}</td>
+                <td className="tabular">{d.avg_qa ?? "—"}</td>
+                <td className="tabular">{d.avg_sentiment == null ? "—" : `${d.avg_sentiment > 0 ? "+" : ""}${d.avg_sentiment}`}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
     </div>
   );
 }

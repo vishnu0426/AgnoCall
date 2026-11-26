@@ -406,6 +406,29 @@ class AppSetting(Base):
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class ReportSchedule(Base):
+    """A recurring emailed analytics report (Settings > Scheduled reports). `next_run_at` is UTC; the clock
+    the schedule is read in is REPORT_TIMEZONE."""
+
+    __tablename__ = "report_schedules"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    name = Column(String(80), nullable=False)
+    recipients = Column(JSON, nullable=False)          # [email]
+    frequency = Column(String(10), nullable=False)     # daily | weekly | monthly
+    weekday = Column(Integer, nullable=True)           # 0 = Monday (weekly)
+    month_day = Column(Integer, nullable=True)         # 1-28 (monthly)
+    send_time = Column(String(5), nullable=False)      # "HH:MM"
+    period_days = Column(Integer, nullable=False, default=7)   # 7 | 30 | 90 | 0 (all time)
+    formats = Column(JSON, nullable=False)             # ["pdf", "csv"]
+    enabled = Column(Boolean, nullable=False, default=True)
+    next_run_at = Column(DateTime, nullable=True)      # UTC
+    last_run_at = Column(DateTime, nullable=True)      # UTC
+    last_status = Column(String(10), nullable=True)    # sent | failed
+    last_error = Column(Text, nullable=True)
+    created_by = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class EvaluationForm(Base):
     """Ported from FB models/evaluation_form.js — tableName 'rec_app_evaluation_forms'."""
 

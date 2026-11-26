@@ -38,6 +38,17 @@ const REVIEWED_OPTIONS = [
   { value: "false", label: "Not reviewed yet" },
 ];
 
+const CONVERSATION_OPTIONS = [
+  { value: "", label: "All recordings" },
+  { value: "true", label: "Real conversations" },
+  { value: "false", label: "IVR, silent or very short" },
+];
+
+const CATEGORY_OPTIONS = [
+  "billing", "technical_support", "account_management", "sales", "cancellation", "complaint",
+  "general_inquiry", "other",
+];
+
 const SELECT_CLASS =
   "text-[13px] border border-hairline rounded-md px-2.5 py-1.5 bg-panel text-ink hover:border-accent/50 transition-colors focus:outline-none focus:ring-1 focus:ring-accent";
 
@@ -53,9 +64,11 @@ export default function CallsFilterBar() {
   const reviewed = searchParams.get("reviewed") ?? "";
   const agentId = searchParams.get("agent_id") ?? "";
   const urlSearch = searchParams.get("search") ?? "";
+  const conversation = searchParams.get("conversation") ?? "";
+  const category = searchParams.get("category") ?? "";
   const [searchText, setSearchText] = useState(urlSearch);
   const hasFilters = status !== "" || riskLevel !== "" || days !== "" || hasViolations !== ""
-    || agentId !== "" || urlSearch !== "" || reviewed !== "";
+    || agentId !== "" || urlSearch !== "" || reviewed !== "" || conversation !== "" || category !== "";
 
   function updateFilter(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -139,6 +152,28 @@ export default function CallsFilterBar() {
       >
         {REVIEWED_OPTIONS.map((opt) => (
           <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+      <select
+        aria-label="Filter by conversation type"
+        className={SELECT_CLASS}
+        value={conversation}
+        onChange={(e) => updateFilter("conversation", e.target.value)}
+        title="Real conversations are what Analytics averages. IVR surveys, silent and very short recordings are listed apart."
+      >
+        {CONVERSATION_OPTIONS.map((opt) => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+      <select
+        aria-label="Filter by category"
+        className={SELECT_CLASS}
+        value={category}
+        onChange={(e) => updateFilter("category", e.target.value)}
+      >
+        <option value="">All categories</option>
+        {CATEGORY_OPTIONS.map((c) => (
+          <option key={c} value={c}>{c.replace("_", " ")}</option>
         ))}
       </select>
       {hasFilters && (

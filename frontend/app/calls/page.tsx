@@ -16,7 +16,7 @@ export default async function CallsPage({
   searchParams: Promise<{
     page?: string; status?: string; risk_level?: string;
     agent_id?: string; days?: string; has_violations?: string; search?: string;
-    reviewed?: string; sort?: string; order?: string;
+    reviewed?: string; sort?: string; order?: string; category?: string; conversation?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -24,10 +24,12 @@ export default async function CallsPage({
   const days = Number(sp.days) > 0 ? Number(sp.days) : undefined;
   const hasViolations = sp.has_violations === "true" ? true : sp.has_violations === "false" ? false : undefined;
   const reviewed = sp.reviewed === "true" ? true : sp.reviewed === "false" ? false : undefined;
+  const conversation = sp.conversation === "true" ? true : sp.conversation === "false" ? false : undefined;
   const order: "asc" | "desc" | undefined = sp.order === "asc" ? "asc" : sp.order === "desc" ? "desc" : undefined;
   const page = Math.max(1, Number(pageParam) || 1);
   const query = {
     status, riskLevel, agentId, days, hasViolations, search, reviewed, sort: sp.sort, order,
+    category: sp.category || undefined, conversation,
   };
 
   let loadError = false;

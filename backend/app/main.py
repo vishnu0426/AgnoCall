@@ -12,7 +12,7 @@ from sqlalchemy.exc import DataError
 from app.core.config import get_settings
 from app.core.database import Base, engine
 from app.storage.minio_client import ensure_bucket
-from app.api import calls, dashboard, internal, agents, compliance, analytics, forms, forms_graphql, triage, ingestion, calibration, review, settings as settings_api
+from app.api import calls, dashboard, internal, agents, compliance, analytics, forms, forms_graphql, triage, ingestion, calibration, review, settings as settings_api, reports as reports_api
 from app.core.indexes import ensure_indexes
 from app.core.response_cache import ResponseCacheMiddleware
 
@@ -52,6 +52,7 @@ app.include_router(calibration.router, prefix="/api/v1")
 app.include_router(review.router, prefix="/api/v1")
 app.include_router(settings_api.router, prefix="/api/v1")
 app.include_router(settings_api.account_router, prefix="/api/v1")
+app.include_router(reports_api.router, prefix="/api/v1")
 
 # Forms module (ported from the standalone Form Builder project).
 app.include_router(forms.router, prefix="/api/v1")

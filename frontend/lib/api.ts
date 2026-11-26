@@ -65,6 +65,7 @@ export interface CallsQuery {
   status?: string; riskLevel?: string; page?: number; pageSize?: number;
   agentId?: string; days?: number; hasViolations?: boolean; search?: string;
   reviewed?: boolean; sort?: string; order?: "asc" | "desc";
+  category?: string; conversation?: boolean;
 }
 
 export interface BulkReprocessResult {
@@ -81,6 +82,8 @@ function callsQueryString(params?: CallsQuery): string {
   if (params?.hasViolations !== undefined) q.set("has_violations", String(params.hasViolations));
   if (params?.reviewed !== undefined) q.set("reviewed", String(params.reviewed));
   if (params?.search) q.set("search", params.search);
+  if (params?.category) q.set("category", params.category);
+  if (params?.conversation !== undefined) q.set("conversation", String(params.conversation));
   if (params?.status) q.set("status", params.status);
   if (params?.riskLevel) q.set("risk_level", params.riskLevel);
   if (params?.sort) q.set("sort", params.sort);
@@ -236,6 +239,34 @@ export interface AppSetting {
   updated_at: string | null;
 }
 
+export interface ReportSchedule {
+  id: string;
+  name: string;
+  recipients: string[];
+  frequency: "daily" | "weekly" | "monthly";
+  weekday: number | null;
+  month_day: number | null;
+  send_time: string;
+  period_days: number;
+  formats: ("pdf" | "csv")[];
+  enabled: boolean;
+  when: string;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_status: "sent" | "failed" | null;
+  last_error: string | null;
+  created_by: string | null;
+}
+
+export interface ReportSchedulesResponse {
+  smtp: { configured: boolean; host: string | null; from: string | null; security: string };
+  timezone: string;
+  max_recipients: number;
+  items: ReportSchedule[];
+}
+
+export type ReportScheduleInput = Omit<ReportSchedule, "id" | "when" | "next_run_at" | "last_run_at" | "last_status" | "last_error" | "created_by">;
+
 async function sendJson<T>(path: string, method: string, body?: unknown): Promise<T> {
   const res = await fetchWithTimeout(`${API_BASE}${path}`, {
     method,
@@ -245,11 +276,16 @@ async function sendJson<T>(path: string, method: string, body?: unknown): Promis
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    let detail = text;
+    let detail: unknown = text;
     try {
       detail = JSON.parse(text).detail ?? text;
     } catch {
       /* not JSON */
+    }
+    // FastAPI validation errors (422) come as a list of {msg}; show the first message, not "422 Unprocessable Entity".
+    if (Array.isArray(detail)) {
+      const msg = detail.map((d) => (d && typeof d.msg === "string" ? d.msg : "")).find(Boolean);
+      detail = msg ? msg.replace(/^Value error, /, "") : "";
     }
     throw new Error(typeof detail === "string" && detail ? detail : `${res.status} ${res.statusText}`);
   }
@@ -526,6 +562,8 @@ export interface HeatmapCell {
 
 export interface CategoryStat {
   category: string;
+  /** raw value the Calls page filters on */
+  key?: string | null;
   count: number;
   avg_sentiment: number | null;
   avg_qa: number | null;
@@ -557,16 +595,43 @@ export interface QACalibration {
   by_criterion: CriterionDelta[];
 }
 
+export interface AnalyticsKpis {
+  processed_calls: number;
+  avg_qa_score: number | null;
+  avg_health_score: number | null;
+  negative_end_percent: number | null;
+  avg_duration_seconds: number | null;
+  follow_up_required: number;
+  needs_attention: number;
+}
+
+export interface AnalyticsQuality {
+  processed: number;
+  conversations: number;
+  excluded: number;
+  one_sided: number;
+  roles_from_channel: number;
+  failed: number;
+  min_words: number;
+  min_seconds: number;
+}
+
+export interface AttentionItem {
+  call_id: string;
+  filename: string;
+  agent: string | null;
+  qa: number | null;
+  reasons: string[];
+}
+
 export interface AnalyticsOverview {
-  kpis: {
-    processed_calls: number;
-    avg_qa_score: number | null;
-    avg_health_score: number | null;
-    negative_end_percent: number | null;
-    avg_duration_seconds: number | null;
-    follow_up_required: number;
-    needs_attention: number;
-  };
+  kpis: AnalyticsKpis;
+  /** same KPIs for the period before; only present when a period is chosen */
+  kpis_previous: AnalyticsKpis | null;
+  quality: AnalyticsQuality;
+  attention: { total: number; items: AttentionItem[] };
+  generated_at: string;
+  days: number | null;
   volume_heatmap: HeatmapCell[];
   agent_criteria_heatmap: HeatmapCell[];
   category_stats: CategoryStat[];
@@ -619,6 +684,16 @@ export const api = {
   reviewComplianceFlag: (id: string, outcome: "confirmed" | "rejected" | null) =>
     sendJson<{ id: string; reviewed: boolean; review_outcome: string | null }>(
       `/calibration/compliance/${id}`, "PUT", { outcome }),
+  listReportSchedules: async (): Promise<ReportSchedulesResponse> => {
+    // recipients are email addresses, so this list needs the signed-in token
+    const res = await fetchWithTimeout(`${API_BASE}/report-schedules`, { headers: authHeader(), cache: "no-store" });
+    if (!res.ok) throw new Error(res.status === 401 || res.status === 403 ? "Sign in to manage scheduled reports." : `Could not load reports (${res.status}).`);
+    return res.json();
+  },
+  createReportSchedule: (body: ReportScheduleInput) => sendJson<ReportSchedule>("/report-schedules", "POST", body),
+  updateReportSchedule: (id: string, body: ReportScheduleInput) => sendJson<ReportSchedule>(`/report-schedules/${id}`, "PUT", body),
+  deleteReportSchedule: (id: string) => sendJson<{ ok: boolean }>(`/report-schedules/${id}`, "DELETE"),
+  sendReportNow: (id: string) => sendJson<ReportSchedule>(`/report-schedules/${id}/send-now`, "POST"),
   listSettings: () => request<AppSetting[]>("/settings"),
   updateSetting: (key: string, value: number | boolean) => sendJson<AppSetting[]>(`/settings/${key}`, "PUT", { value }),
   resetSetting: (key: string) => sendJson<AppSetting[]>(`/settings/${key}`, "DELETE"),
@@ -672,7 +747,13 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(review),
     }),
-  analyticsOverview: () => request<AnalyticsOverview>(`/analytics/overview`),
+  analyticsOverview: (params?: { days?: number; agentId?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.days) q.set("days", String(params.days));
+    if (params?.agentId) q.set("agent_id", params.agentId);
+    const qs = q.toString();
+    return request<AnalyticsOverview>(`/analytics/overview${qs ? `?${qs}` : ""}`);
+  },
   getRecommendations: (id: string) => request<Recommendation[]>(`/calls/${id}/recommendations`),
   listAgents: () => request<AgentSummary[]>(`/agents`),
   getAgent: (id: string) => request<AgentDetail>(`/agents/${id}`),

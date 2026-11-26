@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, AppSetting } from "@/lib/api";
 import PageContainer from "@/components/PageContainer";
+import ReportSchedules from "@/components/settings/ReportSchedules";
 
 const inputCls =
   "text-[13px] border border-hairline rounded-md px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-accent";
@@ -179,6 +180,7 @@ export default function SettingsPage() {
           ))}
         </section>
       ))}
+      <ReportSchedules signedIn={Boolean(user)} />
       <PasswordCard signedIn={Boolean(user)} />
     </PageContainer>
   );

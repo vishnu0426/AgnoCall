@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session, joinedload, load_only, selectinload
 
+from app.core import settings_store as store
+from app.core.conversation import conversation_ids
 from app.core.database import get_db, get_read_db
 from app.models.models import (
     Call, Agent, CallStatus, ProcessingJob, JobStage, JobStatus,
@@ -172,7 +174,8 @@ SORTS = {"date", "qa", "violations", "duration", "risk", "status", "agent"}
 EXPORT_LIMIT = 5000
 
 
-def _filtered_calls(db: Session, status, risk_level, agent_id, days, has_violations, search, reviewed):
+def _filtered_calls(db: Session, status, risk_level, agent_id, days, has_violations, search, reviewed,
+                    category=None, conversation=None):
     """The Calls-page filters as one query (shared by the list and the CSV export).
     Returns (query, set of tables already joined, so a sort never joins one twice)."""
     if agent_id and not is_uuid(agent_id):
@@ -191,6 +194,13 @@ def _filtered_calls(db: Session, status, risk_level, agent_id, days, has_violati
     if reviewed is not None:
         done = db.query(ManualQAReview.call_id).filter(ManualQAReview.status == "completed")
         q = q.filter(Call.id.in_(done) if reviewed else ~Call.id.in_(done))
+    if category:
+        q = q.filter(Call.id.in_(db.query(CallClassification.call_id).filter(CallClassification.category == category)))
+    if conversation is not None:
+        # the same test analytics uses: a real conversation vs an IVR survey / "hello?" / one-liner
+        cfg = store.effective(db)
+        real = conversation_ids(cfg.analytics_min_words, cfg.analytics_min_seconds)
+        q = q.filter(Call.id.in_(real) if conversation else ~Call.id.in_(real))
     if search and search.strip():
         # escape LIKE wildcards so a search for "100%" or "a_b" is literal
         term = search.strip()[:100].replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -244,8 +254,11 @@ def list_calls(
     reviewed: Optional[bool] = None,
     sort: Optional[str] = None,
     order: str = "desc",
+    category: Optional[str] = None,
+    conversation: Optional[bool] = None,
 ):
-    base_query, joined = _filtered_calls(db, status, risk_level, agent_id, days, has_violations, search, reviewed)
+    base_query, joined = _filtered_calls(db, status, risk_level, agent_id, days, has_violations, search, reviewed,
+                                         category, conversation)
 
     # Bound the page size so one request can't ask for the whole table.
     page = max(1, page)
@@ -277,9 +290,11 @@ def export_calls_csv(
     status: Optional[str] = None, risk_level: Optional[str] = None, db: Session = Depends(get_read_db),
     agent_id: Optional[str] = None, days: Optional[int] = None, has_violations: Optional[bool] = None,
     search: Optional[str] = None, reviewed: Optional[bool] = None, sort: Optional[str] = None, order: str = "desc",
+    category: Optional[str] = None, conversation: Optional[bool] = None,
 ):
     """The current filtered list as a spreadsheet (newest first unless sorted), capped at EXPORT_LIMIT rows."""
-    base_query, joined = _filtered_calls(db, status, risk_level, agent_id, days, has_violations, search, reviewed)
+    base_query, joined = _filtered_calls(db, status, risk_level, agent_id, days, has_violations, search, reviewed,
+                                         category, conversation)
     calls = _apply_sort(db, base_query.options(*_summary_loader_options()), joined, sort, order).limit(EXPORT_LIMIT).all()
     counts, severities = violation_stats(db, [c.id for c in calls])
     out = io.StringIO()
