@@ -77,6 +77,8 @@ class Settings(BaseSettings):
     # The clock schedules are read in ("08:00" means 08:00 here). An IANA name such as Asia/Kolkata.
     report_timezone: str = "UTC"
     report_max_recipients: int = 20
+    # Company name in the footer of every report email.
+    report_company: str = "AgnoShin"
     # The one standard message at the top of every report email. "\\n" in .env means a line break.
     report_message: str = "Hello,\n\nHere is your scheduled AgnoCall analytics report. It covers real conversations only: IVR surveys, silent and very short recordings are left out of the averages and counted separately. The attached report has the full analytics: key metrics, categories, topics, sentiment, emotions, call volume, agent scores and how the AI compares with your reviewers.\n\nThis message is sent automatically."
 

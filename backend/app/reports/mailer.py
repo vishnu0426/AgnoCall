@@ -9,16 +9,27 @@ class ReportError(Exception):
     """A failure with a message that is safe to show in the UI (never contains a password)."""
 
 
+def sender(s) -> str:
+    """SMTP_FROM, or (when blank) the SMTP login if that is an email address, as Gmail and Office 365 require."""
+    if parseaddr(s.smtp_from)[1]:
+        return s.smtp_from.strip()
+    user = s.smtp_username.strip()
+    return user if "@" in parseaddr(user)[1] else ""
+
+
 def smtp_configured(s) -> bool:
-    return bool(s.smtp_host.strip() and parseaddr(s.smtp_from)[1])
+    return bool(s.smtp_host.strip() and sender(s))
 
 
-def send_email(s, to: list[str], subject: str, text: str, attachments: list[tuple[str, bytes, str]]) -> None:
+def send_email(s, to: list[str], subject: str, text: str, attachments: list[tuple[str, bytes, str]],
+               html: str | None = None) -> None:
     if not smtp_configured(s):
         raise ReportError("Email is not set up: put SMTP_HOST and SMTP_FROM in the server's .env and restart.")
     msg = EmailMessage()
-    msg["From"], msg["To"], msg["Subject"] = s.smtp_from, ", ".join(to), subject   # EmailMessage rejects header injection
+    msg["From"], msg["To"], msg["Subject"] = sender(s), ", ".join(to), subject   # EmailMessage rejects header injection
     msg.set_content(text)
+    if html:
+        msg.add_alternative(html, subtype="html")
     for filename, data, mime in attachments:
         maintype, subtype = mime.split("/", 1)
         msg.add_attachment(data, maintype=maintype, subtype=subtype, filename=filename)

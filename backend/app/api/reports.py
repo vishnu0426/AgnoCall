@@ -1,5 +1,6 @@
 """Scheduled reports: create, change and send analytics reports by email (PDF and/or CSV)."""
 import re
+import time
 from datetime import datetime
 from typing import List, Optional
 
@@ -132,7 +133,7 @@ def list_schedules(db: Session = Depends(get_db), _user: dict = Depends(require_
     return {
         # never the username or password
         "smtp": {"configured": mailer.smtp_configured(cfg), "host": cfg.smtp_host or None,
-                 "from": cfg.smtp_from or None, "security": cfg.smtp_security},
+                 "from": mailer.sender(cfg) or None, "security": cfg.smtp_security},
         "timezone": cfg.report_timezone,
         "max_recipients": cfg.report_max_recipients,
         "items": [_out(s) for s in db.query(ReportSchedule).order_by(ReportSchedule.created_at).all()],
@@ -163,6 +164,25 @@ def delete_schedule(schedule_id: str, db: Session = Depends(get_db), _a: dict = 
     db.delete(_get(db, schedule_id))
     db.commit()
     return {"ok": True}
+
+
+_test_sends: dict[str, list[float]] = {}
+
+
+@router.post("/send-test")
+def send_test(body: ScheduleIn, db: Session = Depends(get_db), user: dict = Depends(require_admin)):
+    """Email the report to the recipients typed in the form, without saving a schedule."""
+    key = str(user.get("username") or user.get("sub") or "")
+    now = time.monotonic()
+    recent = [t for t in _test_sends.get(key, []) if now - t < 60]
+    if len(recent) >= 5:
+        raise HTTPException(429, "Too many test emails. Wait a minute and try again.")
+    _test_sends[key] = recent + [now]
+    try:
+        service.send_test(db, body.model_dump())
+    except mailer.ReportError as e:
+        raise HTTPException(502, str(e))
+    return {"ok": True, "sent_to": body.recipients}
 
 
 @router.post("/{schedule_id}/send-now")

@@ -33,3 +33,20 @@ def rule_category(code: str | None, raw_category: str | None = None) -> str:
         return RULES[c][1]
     raw = (raw_category or "").strip()
     return raw.replace("_", " ").title() if raw else "Other"
+
+
+# A violation whose own explanation says the rule was MET is the AI listing a passed check as a failure.
+_NEGATION = re.compile(
+    r"\b(not|n't|no|never|without|fail\w*|lack\w*|missing|absent|omit\w*|skip\w*|neither|nor|did not|didn't|"
+    r"incomplete|insufficient|improper\w*|inappropriate\w*|unprofessional\w*)\b", re.I)
+_AFFIRMATION = re.compile(
+    r"\b(greeted|did greet|stated (their|his|her) name|introduced (themselves|himself|herself)|did verify|"
+    r"verified the customer|properly|appropriately|correctly|thanked|closed the call|complied|"
+    r"met the (requirement|rule)|followed the|was satisfied|no violation)\b", re.I)
+
+
+def contradicts_itself(explanation: str | None) -> bool:
+    """True when the explanation affirms the agent did the right thing and says nothing negative.
+    Deliberately narrow: a real violation almost always contains a negative word ("did not greet")."""
+    text = (explanation or "").strip()
+    return bool(text) and bool(_AFFIRMATION.search(text)) and not _NEGATION.search(text)

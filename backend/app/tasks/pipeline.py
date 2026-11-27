@@ -362,7 +362,7 @@ EXTRACTION RULES for customer_info:
 - Use null ONLY when the value is truly never mentioned in the transcript. Never invent a value.
 
 {rubric.COMPLIANCE_GUIDANCE}
-COMPLIANCE RULES to check:
+COMPLIANCE RULES to check (list a rule in compliance_violations ONLY if the agent or customer BROKE it; if the rule was met, leave it out entirely, and never write an explanation saying the rule was followed):
 {chr(10).join(f"- {r['code']}: {r['rule']}" for r in DEFAULT_COMPLIANCE_RULES)}
 
 Return JSON with this exact shape:
@@ -450,6 +450,11 @@ def _stage_qa(db, call: Call, segments: list[dict], analysis: dict):
 def _stage_compliance(db, call: Call, segments: list[dict], analysis: dict):
     _touch_job(db, call.id, JobStage.compliance, JobStatus.running)
     for v in analysis.get("compliance_violations", []):
+        if compliance_rules.contradicts_itself(v.get("explanation")):
+            # The AI listed a rule the agent actually met ("The agent greeted the customer...") as a violation.
+            logger.warning("dropped self-contradicting compliance flag call=%s rule=%s explanation=%r",
+                        call.id, v.get("rule_code"), v.get("explanation"))
+            continue
         db.add(ComplianceViolation(
             call_id=call.id,
             rule_code=compliance_rules.normalise_code(v.get("rule_code")),

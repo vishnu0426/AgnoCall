@@ -40,15 +40,31 @@ function ScheduleForm({
   const toggle = (f: "pdf" | "csv") =>
     set("formats", v.formats.includes(f) ? v.formats.filter((x) => x !== f) : [...v.formats, f]);
 
+  const build = (): ReportScheduleInput => ({
+    ...v,
+    recipients: recipients.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean),
+    weekday: v.frequency === "weekly" ? v.weekday ?? 0 : null,
+    month_day: v.frequency === "monthly" ? v.month_day ?? 1 : null,
+  });
+
+  const [testing, setTesting] = useState(false);
+  const [testNote, setTestNote] = useState<{ ok: boolean; text: string } | null>(null);
+  async function sendTest() {
+    setTesting(true);
+    setTestNote(null);
+    try {
+      const r = await api.sendReportTest(build());
+      setTestNote({ ok: true, text: `Test sent to ${r.sent_to.join(", ")}. Check the inbox, then save the schedule.` });
+    } catch (e) {
+      setTestNote({ ok: false, text: e instanceof Error ? e.message : "Could not send the test." });
+    } finally {
+      setTesting(false);
+    }
+  }
+
   function submit(e: FormEvent) {
     e.preventDefault();
-    const list = recipients.split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
-    onSave({
-      ...v,
-      recipients: list,
-      weekday: v.frequency === "weekly" ? v.weekday ?? 0 : null,
-      month_day: v.frequency === "monthly" ? v.month_day ?? 1 : null,
-    });
+    onSave(build());
   }
 
   const label = "block text-[12px] text-faint mb-1";
@@ -116,8 +132,16 @@ function ScheduleForm({
         <button type="submit" disabled={busy} className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white hover:opacity-90 disabled:opacity-40">
           {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Save schedule
         </button>
+        <button type="button" disabled={busy || testing} onClick={sendTest}
+          title="Email this report to the recipients right now as a test. Nothing is saved."
+          className="inline-flex items-center gap-1.5 rounded-md border border-hairline bg-white px-3 py-1.5 text-[12.5px] font-medium hover:bg-panelRaised disabled:opacity-40">
+          {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Send now
+        </button>
         <button type="button" onClick={onCancel} className="px-2 py-1.5 text-[12.5px] text-muted hover:text-ink">Cancel</button>
       </div>
+      {testNote && (
+        <div role="status" className={`text-[12.5px] ${testNote.ok ? "text-good" : "text-bad"}`}>{testNote.text}</div>
+      )}
     </form>
   );
 }
@@ -197,7 +221,7 @@ export default function ReportSchedules({ signedIn }: { signedIn: boolean }) {
               <p className="flex items-start gap-2 text-muted">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-good" />
                 <span>
-                  Emails are sent from <b className="text-ink">{data.smtp.from}</b> through <b className="text-ink">{data.smtp.host}</b>.
+                  Reports are emailed from <b className="text-ink">{data.smtp.from}</b>.
                   Times are in <b className="text-ink">{data.timezone}</b>.
                 </span>
               </p>

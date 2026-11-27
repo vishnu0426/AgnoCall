@@ -324,7 +324,7 @@ def _schedule(db, **kw):
 def test_every_email_starts_with_the_one_standard_message(db, smtp):
     s = _schedule(db)
     service.deliver(db, s)
-    body = FakeSMTP.instances[0].sent.get_body().get_content()
+    body = FakeSMTP.instances[0].sent.get_body(preferencelist=("plain",)).get_content()
     assert body.startswith("Hello,\n\nHere is your scheduled AgnoCall analytics report.")
     assert "Weekly QA" in body and "The full report is attached (CSV)." in body
 
@@ -332,13 +332,13 @@ def test_every_email_starts_with_the_one_standard_message(db, smtp):
 def test_message_from_env_turns_backslash_n_into_line_breaks(db, smtp, monkeypatch):
     monkeypatch.setattr(smtp, "report_message", "Hi team,\n\nPlease read this.")
     service.deliver(db, _schedule(db))
-    assert FakeSMTP.instances[0].sent.get_body().get_content().startswith("Hi team,\n\nPlease read this.\n")
+    assert FakeSMTP.instances[0].sent.get_body(preferencelist=("plain",)).get_content().startswith("Hi team,\n\nPlease read this.\n")
 
 
 def test_an_empty_message_is_left_out(db, smtp, monkeypatch):
     monkeypatch.setattr(smtp, "report_message", "")
     service.deliver(db, _schedule(db))
-    assert FakeSMTP.instances[0].sent.get_body().get_content().startswith("Weekly QA\n")
+    assert FakeSMTP.instances[0].sent.get_body(preferencelist=("plain",)).get_content().startswith("Weekly QA\n")
 
 
 def pdf_text(data: bytes) -> str:
@@ -389,3 +389,44 @@ def test_csv_also_carries_trend_emotions_and_calibration(db):
     text = render.build_csv(analytics_overview(db=db, days=30), "r", "now").decode("utf-8-sig")
     assert "Day,Positive,Neutral,Negative" in text and "Customer emotion,Calls" in text
     assert "QA calibration (AI vs human reviewers)" in text
+
+
+# ---- html email, footer and the unsaved test send --------------------------------------
+
+def test_email_is_html_with_logo_and_company_footer_and_stays_utc(db, smtp):
+    s = ReportSchedule(name="Weekly <QA>", recipients=["a@x.com"], frequency="daily", send_time="08:00",
+                       period_days=7, formats=["csv"], enabled=True)
+    db.add(s)
+    db.commit()
+    speak(db, mk(db, "real.wav", qa=80))
+    service.deliver(db, s, utc(2026, 11, 26, 8, 0))
+    msg = FakeSMTP.instances[0].sent
+    body = msg.get_body(preferencelist=("html",)).get_content()
+    plain = msg.get_body(preferencelist=("plain",)).get_content()
+    assert "AgnoCall" in body and "AgnoShin" in body and "Weekly &lt;QA&gt;" in body      # logo, footer, escaped name
+    assert "<script" not in body and "http" not in body.replace("http-equiv", "")          # nothing fetched or linked
+    assert "do not reply" in plain and "AgnoShin" in plain and "08:00 UTC" in plain
+    assert "[TEST]" not in msg["Subject"]
+
+
+def test_test_send_is_marked_and_saves_nothing(db, smtp):
+    before = db.query(ReportSchedule).count()
+    res = api.send_test(body(recipients=["me@x.com"]), db=db, user={"username": "t1"})
+    assert res["sent_to"] == ["me@x.com"] and db.query(ReportSchedule).count() == before
+    msg = FakeSMTP.instances[0].sent
+    assert msg["Subject"].startswith("[TEST] ") and msg["To"] == "me@x.com"
+    assert "has not been saved" in msg.get_body(preferencelist=("html",)).get_content()
+
+
+def test_test_send_failure_is_clear_and_it_is_rate_limited(db, smtp, monkeypatch):
+    api._test_sends.clear()
+    monkeypatch.setattr(smtp, "smtp_host", "")
+    with pytest.raises(HTTPException) as e:
+        api.send_test(body(), db=db, user={"username": "t2"})
+    assert e.value.status_code == 502
+    for _ in range(4):
+        with pytest.raises(HTTPException):
+            api.send_test(body(), db=db, user={"username": "t2"})
+    with pytest.raises(HTTPException) as e:
+        api.send_test(body(), db=db, user={"username": "t2"})
+    assert e.value.status_code == 429

@@ -742,6 +742,8 @@ export const api = {
   createReportSchedule: (body: ReportScheduleInput) => sendJson<ReportSchedule>("/report-schedules", "POST", body),
   updateReportSchedule: (id: string, body: ReportScheduleInput) => sendJson<ReportSchedule>(`/report-schedules/${id}`, "PUT", body),
   deleteReportSchedule: (id: string) => sendJson<{ ok: boolean }>(`/report-schedules/${id}`, "DELETE"),
+  sendReportTest: (body: ReportScheduleInput) =>
+    sendJson<{ ok: boolean; sent_to: string[] }>("/report-schedules/send-test", "POST", body),
   sendReportNow: (id: string) => sendJson<ReportSchedule>(`/report-schedules/${id}/send-now`, "POST"),
   listSettings: () => request<AppSetting[]>("/settings"),
   updateSetting: (key: string, value: number | boolean) => sendJson<AppSetting[]>(`/settings/${key}`, "PUT", { value }),

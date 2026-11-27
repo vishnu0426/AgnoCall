@@ -88,3 +88,34 @@ def test_a_failed_earlier_upload_does_not_block_a_retry(db, client, uploads):
     db.commit()
     again = client.post("/api/v1/calls", files={"file": ("a.wav", wav, "audio/wav")}).json()
     assert again["duplicate"] is False and again["call_id"] != first
+
+
+@pytest.mark.parametrize("text", [
+    "The agent greeted the customer and stated their name.",
+    "Agent properly verified the customer's identity.",
+    "The agent thanked the customer and closed the call appropriately.",
+])
+def test_a_flag_that_says_the_rule_was_met_is_recognised(text):
+    assert cr.contradicts_itself(text)
+
+
+@pytest.mark.parametrize("text", [
+    "Agent did not greet the customer.",
+    "The agent greeted the customer but did not state their name.",
+    "Agent failed to verify the customer's identity.",
+    "No closing was given.",
+    "", None,
+])
+def test_real_violations_are_never_dropped(text):
+    assert not cr.contradicts_itself(text)
+
+
+def test_the_pipeline_drops_self_contradicting_flags_and_keeps_real_ones(db):
+    from app.tasks import pipeline
+    call = _call(db)
+    pipeline._stage_compliance(db, call, [], {"compliance_violations": [
+        {"rule_code": "GREETING_MISSING", "severity": "low", "explanation": "The agent greeted the customer and stated their name."},
+        {"rule_code": "CLOSING_MISSING", "severity": "medium", "explanation": "Agent did not close the call."},
+    ]})
+    kept = db.query(ComplianceViolation).filter_by(call_id=call.id).all()
+    assert [v.rule_code for v in kept] == ["CLOSING_MISSING"]
